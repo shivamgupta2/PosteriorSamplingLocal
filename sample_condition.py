@@ -6,6 +6,7 @@ import yaml
 import torch
 import torchvision.transforms as transforms
 import matplotlib.pyplot as plt
+import numpy as np
 
 from guided_diffusion.condition_methods import get_conditioning_method
 from guided_diffusion.measurements import get_noise, get_operator
@@ -15,8 +16,9 @@ from data.dataloader import get_dataset, get_dataloader
 from util.img_utils import clear_color, mask_generator
 from util.logger import get_logger
 
-
+our_method = True
 def load_yaml(file_path: str) -> dict:
+    print(file_path)
     with open(file_path) as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
     return config
@@ -67,11 +69,13 @@ def main():
     # Load diffusion sampler
     sampler = create_sampler(**diffusion_config) 
     sample_fn = partial(sampler.p_sample_loop, model=model, measurement_cond_fn=measurement_cond_fn)
+    denoising_fn = partial(sampler.denoise_sample_loop, model=model)
+    annealed_langevin_fn = partial(sampler.annealed_langevin_loop, model=model)
    
     # Working directory
     out_path = os.path.join(args.save_dir, measure_config['operator']['name'])
     os.makedirs(out_path, exist_ok=True)
-    for img_dir in ['input', 'recon', 'progress', 'label']:
+    for img_dir in ['input', 'recon', 'progress', 'label', 'tilde_x', 'x_cond_tilde_x', 'denoising_progress', 'annealed_langevin_progress', 'annealed_langevin_res']:
         os.makedirs(os.path.join(out_path, img_dir), exist_ok=True)
 
     # Prepare dataloader
@@ -104,10 +108,48 @@ def main():
             y = operator.forward(ref_img, mask=mask)
             y_n = noiser(y)
 
-        else: 
+        elif not our_method: 
             # Forward measurement model (Ax + n)
             y = operator.forward(ref_img)
             y_n = noiser(y)
+        else:
+            y = operator.forward(ref_img)
+            y_n = noiser(y)
+            x_start = torch.randn(ref_img.shape, device=device).requires_grad_()
+            sample = sample_fn(x_start=x_start, measurement=y_n, record=True, save_root=out_path)
+
+
+            noise_time = 100
+            alphas_cumprod = sampler.get_alphas_cumprod()
+            noise = torch.randn(ref_img.shape, device=device) * np.sqrt(1.0 - alphas_cumprod[noise_time])
+            #tilde_x = ref_img * np.sqrt(alphas_cumprod[noise_time]) + noise
+            tilde_x = sample * np.sqrt(alphas_cumprod[noise_time]) + noise
+            tilde_x_scaled = tilde_x * np.sqrt(alphas_cumprod[noise_time])
+            plt.imsave(os.path.join(out_path, 'tilde_x', fname), clear_color(tilde_x_scaled))
+            x_cond_tilde_x = denoising_fn(tilde_x=tilde_x, noise_time=noise_time, record=True, save_root=out_path)
+            plt.imsave(os.path.join(out_path, 'x_cond_tilde_x', fname), clear_color(x_cond_tilde_x))
+
+
+            noise_var = noiser.sigma ** 2
+            #annealed_vars = torch.zeros(1)
+            #annealed_vars[0] = 1e4
+
+            num_anneal_levels = 20
+            all_measurements = [y_n]
+            annealed_vars = torch.zeros(num_anneal_levels)
+            annealed_vars[0] = noise_var
+            factor = 5
+            for i in range(1, num_anneal_levels):
+                annealed_vars[i] = annealed_vars[i-1] + factor * min(annealed_vars[i-1], 1)
+                all_measurements.append(y_n + torch.randn_like(y_n) * torch.sqrt(annealed_vars[i] - annealed_vars[i-1]))
+
+            annealed_vars = torch.flip(annealed_vars, [0])
+            all_measurements.reverse()
+
+
+            res = annealed_langevin_fn(x_cond_tilde_x=x_cond_tilde_x, all_measurements=all_measurements, anneal_vars = annealed_vars, num_anneal_steps=100, step_size=0.00001, operator=operator, alpha_cumprod=alphas_cumprod[0], transpose=operator.transpose, record=True, save_root=out_path)
+            plt.imsave(os.path.join(out_path, 'annealed_langevin_res', fname), clear_color(res))
+            exit()
          
         # Sampling
         x_start = torch.randn(ref_img.shape, device=device).requires_grad_()
