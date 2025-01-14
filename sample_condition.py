@@ -116,10 +116,11 @@ def main():
             y = operator.forward(ref_img)
             y_n = noiser(y)
             x_start = torch.randn(ref_img.shape, device=device).requires_grad_()
-            sample = sample_fn(x_start=x_start, measurement=y_n, record=True, save_root=out_path)
+            #sample = sample_fn(x_start=x_start, measurement=y_n, record=True, save_root=out_path)
+            
+            sample = operator.transpose(y)
 
-
-            noise_time = 100
+            noise_time = 300
             alphas_cumprod = sampler.get_alphas_cumprod()
             noise = torch.randn(ref_img.shape, device=device) * np.sqrt(1.0 - alphas_cumprod[noise_time])
             #tilde_x = ref_img * np.sqrt(alphas_cumprod[noise_time]) + noise
@@ -134,11 +135,11 @@ def main():
             #annealed_vars = torch.zeros(1)
             #annealed_vars[0] = 1e4
 
-            num_anneal_levels = 20
+            num_anneal_levels = 3000
             all_measurements = [y_n]
             annealed_vars = torch.zeros(num_anneal_levels)
             annealed_vars[0] = noise_var
-            factor = 5
+            factor = 0.003
             for i in range(1, num_anneal_levels):
                 annealed_vars[i] = annealed_vars[i-1] + factor * min(annealed_vars[i-1], 1)
                 all_measurements.append(y_n + torch.randn_like(y_n) * torch.sqrt(annealed_vars[i] - annealed_vars[i-1]))
@@ -147,8 +148,13 @@ def main():
             all_measurements.reverse()
 
 
-            res = annealed_langevin_fn(x_cond_tilde_x=x_cond_tilde_x, all_measurements=all_measurements, anneal_vars = annealed_vars, num_anneal_steps=100, step_size=0.00001, operator=operator, alpha_cumprod=alphas_cumprod[0], transpose=operator.transpose, record=True, save_root=out_path)
+            res = annealed_langevin_fn(x_cond_tilde_x=x_cond_tilde_x, all_measurements=all_measurements, anneal_vars = annealed_vars, num_anneal_steps=1, step_size=0.000015, operator=operator, alpha_cumprod=alphas_cumprod[0], transpose=operator.transpose, record=True, save_root=out_path)
+            #res = annealed_langevin_fn(x_cond_tilde_x=x_cond_tilde_x, all_measurements=all_measurements, anneal_vars = annealed_vars, num_anneal_steps=1, step_size=0.00002, operator=operator, alpha_cumprod=alphas_cumprod[0], transpose=operator.transpose, record=True, save_root=out_path)
+            #res = annealed_langevin_fn(x_cond_tilde_x=x_cond_tilde_x, all_measurements=all_measurements, anneal_vars = annealed_vars, num_anneal_steps=1, step_size=0.00003, operator=operator, alpha_cumprod=alphas_cumprod[0], transpose=operator.transpose, record=True, save_root=out_path)
             plt.imsave(os.path.join(out_path, 'annealed_langevin_res', fname), clear_color(res))
+            plt.imsave(os.path.join(out_path, 'input', fname), clear_color(y_n))
+            plt.imsave(os.path.join(out_path, 'label', fname), clear_color(ref_img))
+            plt.imsave(os.path.join(out_path, 'recon', fname), clear_color(sample))
             exit()
          
         # Sampling
