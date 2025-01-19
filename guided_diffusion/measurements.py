@@ -240,7 +240,6 @@ class GaussianNoise(Noise):
         self.sigma = sigma
     
     def forward(self, data):
-        print('here gaussian noise'
         return data + torch.randn_like(data, device=data.device) * self.sigma
 
 

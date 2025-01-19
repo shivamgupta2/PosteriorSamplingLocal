@@ -1,0 +1,33 @@
+import subprocess
+
+# Configuration for the range and step size
+start = 0
+end = 1000
+step = 250
+
+# List to keep track of subprocesses
+processes = []
+
+# Loop through the range and launch each command as a subprocess
+for i in range(start, end, step):
+    i_begin = i
+    i_end = i + step
+    command = [
+        "python3",
+        "sample_condition.py",
+        "--model_config=configs/model_config.yaml",
+        "--diffusion_config=configs/diffusion_config.yaml",
+        "--task_config=configs/super_resolution_config.yaml",
+        f"--i_begin={i_begin}",
+        f"--i_end={i_end}",
+    ]
+    print(f"Starting process for i_begin={i_begin}, i_end={i_end}")
+    # Start the subprocess
+    processes.append(subprocess.Popen(command))
+
+# Wait for all processes to complete
+for process in processes:
+    process.wait()
+
+print("All processes completed.")
+

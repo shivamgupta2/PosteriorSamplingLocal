@@ -51,6 +51,7 @@ def clear_color(x):
 
 def normalize_np(img):
     """ Normalize img in arbitrary range to [0, 1] """
+    print(np.min(img), np.max(img))
     img -= np.min(img)
     img /= np.max(img)
     return img

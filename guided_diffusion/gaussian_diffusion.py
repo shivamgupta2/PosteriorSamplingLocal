@@ -173,59 +173,73 @@ class GaussianDiffusion:
         device = tilde_x.device
         pbar = tqdm(list(range(noise_time))[::-1])
         for idx in pbar:
-            time = torch.tensor([idx] * img.shape[0], device=device)
+            with torch.no_grad():
+                time = torch.tensor([idx] * img.shape[0], device=device)
 
-            #img = img.requires_grad_()
-            out = self.p_sample(x=img, t=time, model=model)
-            img = out['sample']
-            img = img.detach_()
+                #img = img.requires_grad_()
+                out = self.p_sample(x=img, t=time, model=model)
+                img = out['sample']
+                img = img.detach_()
 
-            if record:
-                if idx % 10 == 0:
-                    file_path = os.path.join(save_root, f'denoising_progress/x_{str(idx).zfill(4)}.png')
-                    plt.imsave(file_path, clear_color(img))
+                if record:
+                    if idx % 10 == 0:
+                        file_path = os.path.join(save_root, f'denoising_progress/x_{str(idx).zfill(4)}.png')
+                        plt.imsave(file_path, clear_color(img))
         return img
 
-    def annealed_langevin_loop(self, model, x_cond_tilde_x, all_measurements, anneal_vars, num_anneal_steps, step_size, operator, transpose, alpha_cumprod, record, save_root, varying_step_sizes=False):
+    def annealed_langevin_loop(self, model, x_cond_tilde_x, all_measurements, anneal_vars, num_anneal_steps, step_size, operator, transpose, alpha_cumprod, record, save_root, varying_step_sizes=False, plt_plot=False, normalize_at_end_of_step = False):
 
         device = x_cond_tilde_x.device
         x = x_cond_tilde_x
         for i, (anneal_var, measurement) in enumerate(zip(anneal_vars, all_measurements)):
-
-
+            if i % 100 == 0:
+                print(f'Iteration: {i}')
+        
             for step in range(num_anneal_steps):
-                if step % 100 == 0:
+                if step % 100 == 0 and plt_plot:
                     print(f'iteration: {step}, samples mean: {torch.mean(x)}, samples std: {torch.std(x)}')
                     plt.hist(x.flatten(), bins=50)
                     file_path = os.path.join(save_root, f"gaussian_progress/iteration_{i}.pdf")
                     plt.savefig(file_path)
                 #print('Anneal var:', anneal_var, 'Step:', step)
-                zero_time = torch.tensor([0] * x.shape[0], device=device)
-                model_output = model(x, self._scale_timesteps(zero_time))
+                with torch.no_grad():
+                    zero_time = torch.tensor([0] * x.shape[0], device=device)
+                    model_output = model(x, self._scale_timesteps(zero_time))
 
-                try:
-                    if model_output.shape[1] == 2 * x.shape[1]:
-                        print('here')
-                        model_output, model_var_values = torch.split(model_output, x.shape[1], dim=1)
-                except:
-                    pass
+                    try:
+                        if model_output.shape[1] == 2 * x.shape[1]:
+                            model_output, model_var_values = torch.split(model_output, x.shape[1], dim=1)
+                    except:
+                        pass
 
-                #print(model_output.shape, 'model var values:', model_var_values)
-                #score_est = - model_output/np.sqrt(1 - alpha_cumprod) 
-                score_est = - model_output/np.sqrt(1 - alpha_cumprod) 
-                #print('score est shape:', score_est.shape)
-                cond_score_est = score_est + (transpose(measurement) - transpose(operator(x)))/anneal_var
-                #cond_score_est = score_est
-                noise = torch.randn_like(x)
-                if varying_step_sizes and i < len(anneal_vars) - 1:
-                    cur_step_size = anneal_vars[i] - anneal_vars[i+1]
-                else:
-                    cur_step_size = step_size
-                x = x + cur_step_size * cond_score_est + np.sqrt(2 * cur_step_size) * noise
-                x = x.detach_()
-                if record and step % 100 == 0:
-                    file_path = os.path.join(save_root, f"annealed_langevin_progress/x_{str(anneal_var).zfill(4)}_{str(step)}.png")
-                    plt.imsave(file_path, clear_color(x))
+                    #print(model_output.shape, 'model var values:', model_var_values)
+                    #score_est = - model_output/np.sqrt(1 - alpha_cumprod) 
+                    score_est = - model_output/np.sqrt(1 - alpha_cumprod) 
+                    #print('score est shape:', score_est.shape)
+                    cond_score_est = score_est + (transpose(measurement) - transpose(operator(x)))/anneal_var
+                    #cond_score_est = score_est
+                    noise = torch.randn_like(x)
+                    if varying_step_sizes and i < len(anneal_vars) - 1:
+                        cur_step_size = anneal_vars[i] - anneal_vars[i+1]
+                    else:
+                        cur_step_size = step_size
+                    x = x + cur_step_size * cond_score_est + np.sqrt(2 * cur_step_size) * noise
+                    x = x.detach_()
+
+                    if normalize_at_end_of_step:
+                        x = torch.clamp(x, -1, 1)
+                    #x_img = torch.permute(x, (0, 2, 3, 1))
+                    #x_img -= torch.min(x_img)
+                    #x_img /= torch.max(x_img)
+
+                    #x = (x_img - 0.5)/0.5
+                    #x = torch.permute(x, (0, 3, 1, 2))
+
+
+
+            if record and i % 10 == 0:
+                file_path = os.path.join(save_root, f"annealed_langevin_progress/x_{str(anneal_var).zfill(4)}_{str(step)}.png")
+                plt.imsave(file_path, clear_color(x))
 
         return x
 
@@ -407,6 +421,7 @@ class SpacedDiffusion(GaussianDiffusion):
             model, self.timestep_map, self.rescale_timesteps, self.original_num_steps
         )
 
+
     def _scale_timesteps(self, t):
         # Scaling is done by the wrapped model.
         return t
@@ -434,8 +449,7 @@ class DDPM(SpacedDiffusion):
         sample = out['mean']
 
         noise = torch.randn_like(x)
-        if t != 0:  # no noise when t == 0
-            print('log variance:', out['log_variance'])
+        if t[0] != 0:  # no noise when t == 0
             sample += torch.exp(0.5 * out['log_variance']) * noise
 
         return {'sample': sample, 'pred_xstart': out['pred_xstart']}
