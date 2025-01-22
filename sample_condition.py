@@ -93,7 +93,7 @@ def main():
     # Working directory
     out_path = os.path.join(args.save_dir, measure_config['operator']['name'])
     os.makedirs(out_path, exist_ok=True)
-    for img_dir in ['input', 'recon', 'progress', 'label', 'tilde_x', 'x_cond_tilde_x', 'denoising_progress', 'annealed_langevin_progress', 'annealed_langevin_res', 'annealed_langevin_res_unclamped']:
+    for img_dir in ['input', 'recon', 'progress', 'label', 'tilde_x', 'x_cond_tilde_x', 'denoising_progress', 'annealed_langevin_progress', 'annealed_langevin_res', 'annealed_langevin_res_unclamped', 'dps_unclamped']:
         os.makedirs(os.path.join(out_path, img_dir), exist_ok=True)
 
     # Prepare dataloader
@@ -102,7 +102,7 @@ def main():
     transform = transforms.Compose([transforms.ToTensor(),
                                     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
     dataset = get_dataset(**data_config, transforms=transform)
-    batch_size = 25
+    batch_size = 100
     loader = get_dataloader(dataset, batch_size=batch_size, num_workers=0, train=False)
     if use_existing_dps_recon:
         input_dataset = get_dataset(name='ffhq_input', root='results/super_resolution/input', transforms=transform)
@@ -118,7 +118,13 @@ def main():
         mask_gen = mask_generator(
            **measure_config['mask_opt']
         )
-    
+    params_list = [(1000, 0.009, 1, 5 * 1e-7), (1000, 0.009, 1, 2.5 * 1e-6), (1000, 0.009, 1, 5 * 1e-6), (1000, 0.009, 1, 7.5 * 1e-6)]
+    for params in params_list:
+        img_dir = f'annealed_langevin_res_{params}'
+        os.makedirs(os.path.join(out_path, img_dir), exist_ok=True)
+        img_dir = f'annealed_langevin_res_unclamped_{params}'
+        os.makedirs(os.path.join(out_path, img_dir), exist_ok=True)
+
     # Do Inference
     for i, ref_img in enumerate(loader):
         if args.i_end != -1:
@@ -165,31 +171,32 @@ def main():
             y_n = ref_img[1]
             noise_var = noiser.sigma ** 2
             #params = (1000, 0.009, 1, 0.00002)
-            params = (1000, 0.009, 1, 0.00001)
-            num_anneal_levels, factor, num_anneal_steps, step_size = params
-            all_measurements, annealed_vars = get_annealed_measurements_and_vars(num_anneal_levels, factor, y_n, noise_var)
-            print(annealed_vars)
-            sample = ref_img[2]
+            #params = (1000, 0.009, 1, 0.000001)
+            for params in params_list:
+                num_anneal_levels, factor, num_anneal_steps, step_size = params
+                all_measurements, annealed_vars = get_annealed_measurements_and_vars(num_anneal_levels, factor, y_n, noise_var)
+                print(annealed_vars)
+                sample = ref_img[2]
 
-            
-            noise_time = 100
-            alphas_cumprod = sampler.get_alphas_cumprod()
-            noise = torch.randn(sample.shape, device=device) * np.sqrt(1.0 - alphas_cumprod[noise_time])
-            tilde_x = sample * np.sqrt(alphas_cumprod[noise_time]) + noise
-            tilde_x_scaled = tilde_x * np.sqrt(alphas_cumprod[noise_time])
+                
+                noise_time = 100
+                alphas_cumprod = sampler.get_alphas_cumprod()
+                noise = torch.randn(sample.shape, device=device) * np.sqrt(1.0 - alphas_cumprod[noise_time])
+                tilde_x = sample * np.sqrt(alphas_cumprod[noise_time]) + noise
+                tilde_x_scaled = tilde_x * np.sqrt(alphas_cumprod[noise_time])
 
-            x_cond_tilde_x = denoising_fn(tilde_x=tilde_x, noise_time=noise_time, record=False, save_root=out_path)
+                x_cond_tilde_x = denoising_fn(tilde_x=tilde_x, noise_time=noise_time, record=False, save_root=out_path)
 
-            res = annealed_langevin_fn(x_cond_tilde_x=x_cond_tilde_x, all_measurements=all_measurements, anneal_vars = annealed_vars, num_anneal_steps=num_anneal_steps, step_size=step_size, operator=operator.forward, alpha_cumprod=alphas_cumprod[0], transpose=operator.transpose, record=False, save_root=out_path)
-            for j in range(len(res)):
-                cur_fname = str(i * batch_size + j).zfill(5) + '.png'
-                plt.imsave(os.path.join(out_path, 'annealed_langevin_res_unclamped', cur_fname), clear_color(res[j].unsqueeze(0)))
+                res = annealed_langevin_fn(x_cond_tilde_x=x_cond_tilde_x, all_measurements=all_measurements, anneal_vars = annealed_vars, num_anneal_steps=num_anneal_steps, step_size=step_size, operator=operator.forward, alpha_cumprod=alphas_cumprod[0], transpose=operator.transpose, record=False, save_root=out_path)
+                for j in range(len(res)):
+                    cur_fname = str(i * batch_size + j).zfill(5) + '.png'
+                    plt.imsave(os.path.join(out_path, f'annealed_langevin_res_unclamped_{params}', cur_fname), clear_color(res[j].unsqueeze(0)))
 
-            res = torch.clamp(res, -1, 1)
-            for j in range(len(res)):
-                cur_fname = str(i * batch_size + j).zfill(5) + '.png'
-                print('writing annealed langevin result, file name:', cur_fname)
-                plt.imsave(os.path.join(out_path, 'annealed_langevin_res', cur_fname), clear_color(res[j].unsqueeze(0)))
+                res = torch.clamp(res, -1, 1)
+                for j in range(len(res)):
+                    cur_fname = str(i * batch_size + j).zfill(5) + '.png'
+                    print('writing annealed langevin result, file name:', cur_fname)
+                    plt.imsave(os.path.join(out_path, f'annealed_langevin_res_{params}', cur_fname), clear_color(res[j].unsqueeze(0)))
 
         else:
             y = operator.forward(ref_img)
