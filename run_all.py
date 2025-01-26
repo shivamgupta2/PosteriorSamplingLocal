@@ -3,6 +3,7 @@ import subprocess
 # Configuration for the range and step size
 start = 0
 end = 1000
+#step = 100
 step = 250
 
 # List to keep track of subprocesses
@@ -17,7 +18,9 @@ for i in range(start, end, step):
         "sample_condition.py",
         "--model_config=configs/model_config.yaml",
         "--diffusion_config=configs/diffusion_config.yaml",
-        "--task_config=configs/super_resolution_config.yaml",
+        "--task_config=configs/motion_deblur_config.yaml",
+        #"--task_config=configs/gaussian_deblur_config.yaml",
+        #"--task_config=configs/super_resolution_config.yaml",
         f"--i_begin={i_begin}",
         f"--i_end={i_end}",
     ]
