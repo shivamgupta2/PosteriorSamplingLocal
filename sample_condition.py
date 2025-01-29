@@ -17,8 +17,9 @@ from util.img_utils import clear_color, mask_generator
 from util.logger import get_logger
 
 our_method = True
-use_existing_dps_recon = False
-measure_l2 = False
+use_existing_dps_recon = True
+measure_l2 = True
+
 def load_yaml(file_path: str) -> dict:
     print(file_path)
     with open(file_path) as f:
@@ -46,12 +47,13 @@ def main():
     parser.add_argument('--model_config', type=str)
     parser.add_argument('--diffusion_config', type=str)
     parser.add_argument('--task_config', type=str)
-    parser.add_argument('--gpu', type=int, default=3)
+    parser.add_argument('--gpu', type=int, default=2)
     parser.add_argument('--save_dir', type=str, default='./results')
     parser.add_argument('--i_begin', type=int, default=0)
     parser.add_argument('--i_end', type=int, default =-1)
     args = parser.parse_args()
    
+    print('here', args.i_begin, args.i_end)
     # logger
     logger = get_logger()
     
@@ -138,18 +140,32 @@ def main():
             Aty_l2s = []
             diffs = []
             total_num = 0
-            for i, (labels, dps_recons, annealed_recons, inputs) in enumerate(zip(loader, dps_loader, annealed_loader, input_loader)):
+            i = 0
+            loaders = iter(zip(loader, dps_loader, annealed_loader, input_loader))
+            while i < 1000:
+                try:
+                    (labels, dps_recons, annealed_recons, inputs) = next(loaders) 
+                except:
+                    i += 1
+                    continue
+
                 for label, dps_recon, annealed_recon in zip(labels, dps_recons, annealed_recons):
                     #print('Annealed min max:', torch.min(annealed_recon), torch.max(annealed_recon))
                     #print('DPS min max:', torch.min(dps_recon), torch.max(dps_recon))
                     #print('Annealed Diff squared min max:', torch.min((label - annealed_recon)**2), torch.max((label-annealed_recon)**2))
                     #print('dps Diff squared min max:', torch.min((label - dps_recon)**2), torch.max((label-dps_recon)**2))
-                    Aty = operator.transpose(inputs)
+                    if total_num % 100 == 0:
+                        print('total num:', total_num)
+                    if measure_config['operator']['name'] == 'inpainting':
+                        Aty = inputs
+                    else:
+                        Aty = operator_transpose(inputs)
                     dps_l2s += [torch.sqrt(torch.sum((label - dps_recon) ** 2)).cpu().numpy()]
                     annealed_l2s += [torch.sqrt(torch.sum((label - annealed_recon) ** 2)).cpu().numpy()]
                     diffs += [dps_l2s[-1]-annealed_l2s[-1]]
                     Aty_l2s = [torch.sqrt(torch.sum((label - Aty) ** 2)).cpu().numpy()]
                     total_num += 1
+                i += 1
             dps_l2_mean = np.mean(dps_l2s)
             dps_l2_std = np.std(dps_l2s)
 
@@ -176,6 +192,7 @@ def main():
     if use_existing_dps_recon:
         loader = all_loaders
     for i, ref_img in enumerate(loader):
+        print('here i:', i)
         if args.i_end != -1:
             if i < args.i_begin or i >= args.i_end:
                 continue
@@ -194,19 +211,25 @@ def main():
             sample_fn = partial(sample_fn, measurement_cond_fn=measurement_cond_fn)
 
             # Forward measurement model (Ax + n)
-            y = operator.forward(ref_img, mask=mask)
-            y_n = noiser(y)
+            operator_forward = partial(operator.forward, mask=mask)
+            operator_transpose = operator.transpose
+        else:
+            operator_forward = operator.forward
+            opterator_transpose = operator.transpose
+
+            #y = operator.forward(ref_img, mask=mask)
+            #y_n = noiser(y)
             # Sampling
-            x_start = torch.randn(ref_img.shape, device=device).requires_grad_()
-            sample = sample_fn(x_start=x_start, measurement=y_n, record=True, save_root=out_path)
+            #x_start = torch.randn(ref_img.shape, device=device).requires_grad_()
+            #sample = sample_fn(x_start=x_start, measurement=y_n, record=True, save_root=out_path)
 
-            plt.imsave(os.path.join(out_path, 'input', fname), clear_color(y_n))
-            plt.imsave(os.path.join(out_path, 'label', fname), clear_color(ref_img))
-            plt.imsave(os.path.join(out_path, 'recon', fname), clear_color(sample))
+            #plt.imsave(os.path.join(out_path, 'input', fname), clear_color(y_n))
+            #plt.imsave(os.path.join(out_path, 'label', fname), clear_color(ref_img))
+            #plt.imsave(os.path.join(out_path, 'recon', fname), clear_color(sample))
 
-        elif not our_method: 
+        if not our_method: 
             # Forward measurement model (Ax + n)
-            y = operator.forward(ref_img)
+            y = operator_forward(ref_img)
             y_n = noiser(y)
             # Sampling
             x_start = torch.randn(ref_img.shape, device=device).requires_grad_()
@@ -240,7 +263,7 @@ def main():
 
                 x_cond_tilde_x = denoising_fn(tilde_x=tilde_x, noise_time=noise_time, record=False, save_root=out_path)
 
-                res = annealed_langevin_fn(x_cond_tilde_x=x_cond_tilde_x, all_measurements=all_measurements, anneal_vars = annealed_vars, num_anneal_steps=num_anneal_steps, step_size=step_size, operator=operator.forward, alpha_cumprod=alphas_cumprod[0], transpose=operator.transpose, record=False, save_root=out_path)
+                res = annealed_langevin_fn(x_cond_tilde_x=x_cond_tilde_x, all_measurements=all_measurements, anneal_vars = annealed_vars, num_anneal_steps=num_anneal_steps, step_size=step_size, operator=operator_forward, alpha_cumprod=alphas_cumprod[0], transpose=operator.transpose, record=False, save_root=out_path)
                 for j in range(len(res)):
                     cur_fname = str(i * batch_size + j).zfill(5) + '.png'
                     plt.imsave(os.path.join(out_path, f'annealed_langevin_res_unclamped_{params}', cur_fname), clear_color(res[j].unsqueeze(0)))
@@ -252,7 +275,7 @@ def main():
                     plt.imsave(os.path.join(out_path, f'annealed_langevin_res_{params}', cur_fname), clear_color(res[j].unsqueeze(0)))
 
         else:
-            y = operator.forward(ref_img)
+            y = operator_forward(ref_img)
             y_n = noiser(y)
 
 
@@ -332,7 +355,7 @@ def main():
                 #res = annealed_langevin_fn(x_cond_tilde_x=x_cond_tilde_x, all_measurements=all_measurements, anneal_vars = annealed_vars, num_anneal_steps=1, step_size=0.00001, operator=operator.forward, alpha_cumprod=alphas_cumprod[0], transpose=operator.transpose, record=True, save_root=out_path, normalize_at_end_of_step=False)
                 #res = annealed_langevin_fn(x_cond_tilde_x=x_cond_tilde_x, all_measurements=all_measurements, anneal_vars = annealed_vars, num_anneal_steps=1, step_size=0.00002, operator=operator.forward, alpha_cumprod=alphas_cumprod[0], transpose=operator.transpose, record=True, save_root=out_path, normalize_at_end_of_step=False)
                 #res = annealed_langevin_fn(x_cond_tilde_x=x_cond_tilde_x, all_measurements=all_measurements, anneal_vars = annealed_vars, num_anneal_steps=1, step_size=0.00003, operator=operator.forward, alpha_cumprod=alphas_cumprod[0], transpose=operator.transpose, record=True, save_root=out_path)
-                res = annealed_langevin_fn(x_cond_tilde_x=x_cond_tilde_x, all_measurements=all_measurements, anneal_vars = annealed_vars, num_anneal_steps=num_anneal_steps, step_size=step_size, operator=operator.forward, alpha_cumprod=alphas_cumprod[0], transpose=operator.transpose, record=False, save_root=out_path)
+                res = annealed_langevin_fn(x_cond_tilde_x=x_cond_tilde_x, all_measurements=all_measurements, anneal_vars = annealed_vars, num_anneal_steps=num_anneal_steps, step_size=step_size, operator=operator_forward, alpha_cumprod=alphas_cumprod[0], transpose=operator_transpose, record=False, save_root=out_path)
 
                 for j in range(len(res)):
                     cur_fname = str(i * batch_size + j).zfill(5) + '.png'
