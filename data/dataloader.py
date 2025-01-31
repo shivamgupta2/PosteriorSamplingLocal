@@ -3,6 +3,7 @@ from PIL import Image
 from typing import Callable, Optional
 from torch.utils.data import DataLoader
 from torchvision.datasets import VisionDataset
+import os
 
 
 __DATASET__ = {}
@@ -40,12 +41,20 @@ class FFHQDataset(VisionDataset):
         super().__init__(root, transforms)
 
         self.fpaths = sorted(glob(root + '/**/*.png', recursive=True))
+        self.count_back = 0
         assert len(self.fpaths) > 0, "File list is empty. Check the root."
 
     def __len__(self):
         return len(self.fpaths)
 
     def __getitem__(self, index: int):
+        cur_fname = str(index).zfill(5) + '.png'
+        cur_fname = os.path.join(self.root, cur_fname)
+        index = index + self.count_back
+        if cur_fname not in self.fpaths:
+            print('Not found! Filename:', cur_fname)
+            self.count_back -= 1
+            return None
         fpath = self.fpaths[index]
         img = Image.open(fpath).convert('RGB')
         
@@ -60,12 +69,20 @@ class FFHQInputDataset(VisionDataset):
         super().__init__(root, transforms)
 
         self.fpaths = sorted(glob(root + '/**/*.png', recursive=True))
+        self.count_back = 0
         assert len(self.fpaths) > 0, "File list is empty. Check the root."
 
     def __len__(self):
         return len(self.fpaths)
 
     def __getitem__(self, index: int):
+        cur_fname = str(index).zfill(5) + '.png'
+        cur_fname = os.path.join(self.root, cur_fname)
+        index = index + self.count_back
+        if cur_fname not in self.fpaths:
+            print('Not found! Filename:', cur_fname)
+            self.count_back -= 1
+            return None
         fpath = self.fpaths[index]
         img = Image.open(fpath).convert('RGB')
         
@@ -80,12 +97,20 @@ class FFHQDPSDataset(VisionDataset):
         super().__init__(root, transforms)
 
         self.fpaths = sorted(glob(root + '/**/*.png', recursive=True))
+        self.count_back = 0
         assert len(self.fpaths) > 0, "File list is empty. Check the root."
 
     def __len__(self):
         return len(self.fpaths)
 
     def __getitem__(self, index: int):
+        cur_fname = str(index).zfill(5) + '.png'
+        cur_fname = os.path.join(self.root, cur_fname)
+        index = index + self.count_back
+        if cur_fname not in self.fpaths:
+            print('Not found! Filename:', cur_fname)
+            self.count_back -= 1
+            return None
         fpath = self.fpaths[index]
         img = Image.open(fpath).convert('RGB')
         
@@ -99,13 +124,24 @@ class FFHQAnnealedDataset(VisionDataset):
     def __init__(self, root: str, transforms: Optional[Callable]=None):
         super().__init__(root, transforms)
 
+        self.root = root
+
         self.fpaths = sorted(glob(root + '/**/*.png', recursive=True))
+        self.count_back = 0
+
         assert len(self.fpaths) > 0, "File list is empty. Check the root."
 
     def __len__(self):
         return len(self.fpaths)
 
     def __getitem__(self, index: int):
+        cur_fname = str(index).zfill(5) + '.png'
+        cur_fname = os.path.join(self.root, cur_fname)
+        index = index + self.count_back
+        if cur_fname not in self.fpaths:
+            print('Not found! Filename:', cur_fname)
+            self.count_back -= 1
+            return None
         fpath = self.fpaths[index]
         img = Image.open(fpath).convert('RGB')
         
