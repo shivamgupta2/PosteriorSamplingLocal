@@ -5,15 +5,9 @@
 <!-- See more results in the [project-page](https://jeongsol-kim.github.io/dps-project-page) -->
 
 ## Abstract
-Given a noisy linear measurement $$y = Ax + \eta$$ of a distribution, and a good approximation to the prior 
-, when can we sample from the posterior 
-? Posterior sampling provides an accurate and fair framework for tasks such as inpainting, deblurring, and MRI reconstruction, and several heuristics attempt to approximate it. Unfortunately, approximate posterior sampling is computationally intractable in general.
+Given a noisy linear measurement $$y = Ax + \eta$$ of a distribution $$p(x)$$, and a good approximation to the prior $$p(x)$$, when can we sample from the posterior $$p(x\mid y)$$? Posterior sampling provides an accurate and fair framework for tasks such as inpainting, deblurring, and MRI reconstruction, and several heuristics attempt to approximate it. Unfortunately, approximate posterior sampling is computationally intractable in general.
 
-To sidestep this hardness, we focus on (local or global) log-concave distributions 
-. In this regime, Langevin dynamics yields posterior samples when the exact scores of 
- are available, but it is brittle to score--estimation error, requiring an MGF bound (sub‑exponential error). By contrast, in the unconditional setting, diffusion models succeed with only an 
- bound on the score error. We prove that combining diffusion models with an annealed variant of Langevin dynamics achieves conditional sampling in polynomial time using merely an 
- bound on the score error.
+To sidestep this hardness, we focus on (local or global) log-concave distributions $$p(x)$$. In this regime, Langevin dynamics yields posterior samples when the exact scores of $$p(x)$$ are available, but it is brittle to score--estimation error, requiring an MGF bound (sub‑exponential error). By contrast, in the unconditional setting, diffusion models succeed with only an $$L^2$$ bound on the score error. We prove that combining diffusion models with an annealed variant of Langevin dynamics achieves conditional sampling in polynomial time using merely an $$L^4$$ bound on the score error.
 
 ![cover-img](./figures/cover.jpg)
 
