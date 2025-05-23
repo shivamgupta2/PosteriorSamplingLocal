@@ -1,11 +1,19 @@
-# Diffusion Posterior Sampling for General Noisy Inverse Problems (ICLR 2023 spotlight)
+# Posterior Sampling by Combining Diffusion Models with Annealed Langevin Dynamics
 
 ![result-gif1](./figures/motion_blur.gif)
 ![result-git2](./figures/super_resolution.gif)
 <!-- See more results in the [project-page](https://jeongsol-kim.github.io/dps-project-page) -->
 
 ## Abstract
-In this work, we extend diffusion solvers to efficiently handle general noisy (non)linear inverse problems via the approximation of the posterior sampling. Interestingly, the resulting posterior sampling scheme is a blended version of the diffusion sampling with the manifold constrained gradient without strict measurement consistency projection step, yielding more desirable generative path in noisy settings compared to the previous studies.
+Given a noisy linear measurement $$y = Ax + \eta$$ of a distribution, and a good approximation to the prior 
+, when can we sample from the posterior 
+? Posterior sampling provides an accurate and fair framework for tasks such as inpainting, deblurring, and MRI reconstruction, and several heuristics attempt to approximate it. Unfortunately, approximate posterior sampling is computationally intractable in general.
+
+To sidestep this hardness, we focus on (local or global) log-concave distributions 
+. In this regime, Langevin dynamics yields posterior samples when the exact scores of 
+ are available, but it is brittle to score--estimation error, requiring an MGF bound (sub‑exponential error). By contrast, in the unconditional setting, diffusion models succeed with only an 
+ bound on the score error. We prove that combining diffusion models with an annealed variant of Langevin dynamics achieves conditional sampling in polynomial time using merely an 
+ bound on the score error.
 
 ![cover-img](./figures/cover.jpg)
 
