@@ -29,17 +29,8 @@ Ex) CUDA 10.2 with pytorch 1.7.0
 
 ## Getting started 
 
-### 1) Clone the repository
 
-```
-git clone https://github.com/DPS2022/diffusion-posterior-sampling
-
-cd diffusion-posterior-sampling
-```
-
-<br />
-
-### 2) Download pretrained checkpoint
+### 1) Download pretrained checkpoint
 From the [link](https://drive.google.com/drive/folders/1jElnRoFv7b31fG0v6pTSQkelbSX3xGZh?usp=sharing), download the checkpoint "ffhq_10m.pt" and paste it to ./models/
 ```
 mkdir models
@@ -52,7 +43,7 @@ mv {DOWNLOAD_DIR}/ffqh_10m.pt ./models/
 <br />
 
 
-### 3) Set environment
+### 2) Set environment
 ### [Option 1] Local environment setting
 
 We use the external codes for motion-blurring and non-linear deblurring.
@@ -93,7 +84,7 @@ docker run -it --rm --gpus=all dps-docker
 
 <br />
 
-### 4) Inference
+### 3) Inference
 
 ```
 python3 sample_condition.py \
@@ -102,8 +93,6 @@ python3 sample_condition.py \
 --task_config={TASK-CONFIG};
 ```
 
-
-:speaker: For imagenet, use configs/imagenet_model_config.yaml
 
 <br />
 
@@ -142,19 +131,5 @@ noise:
     name:   # gaussian or poisson
     sigma:  # if you use name: gaussian, set this.
     (rate:) # if you use name: poisson, set this.
-```
-
-## Citation
-If you find our work interesting, please consider citing
-
-```
-@inproceedings{
-chung2023diffusion,
-title={Diffusion Posterior Sampling for General Noisy Inverse Problems},
-author={Hyungjin Chung and Jeongsol Kim and Michael Thompson Mccann and Marc Louis Klasky and Jong Chul Ye},
-booktitle={The Eleventh International Conference on Learning Representations },
-year={2023},
-url={https://openreview.net/forum?id=OnD9zGAGT0k}
-}
 ```
 
